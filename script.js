@@ -2,7 +2,7 @@
   "use strict";
 
   // ------- Configuration -------
-  const SERVICE_NAME = "Non-Surgical Double Chin";
+  const SERVICE_NAME = "Non-Surgical Double Chin and Neck Lifting";
   const SERVICE_DURATION_MIN = 60;
 
   // GHL credentials
@@ -281,8 +281,8 @@
         lastName: lastName || '-',
         email,
         phone,
-        source: 'Non-Surgical Double Chin LP',
-        tags: ['Non-Surgical Double Chin'],
+        source: 'Non-Surgical Double Chin and Neck Lifting LP',
+        tags: ['Non-Surgical Double Chin and Neck Lifting'],
       });
       const contactId = contactRes.contact?.id || contactRes.id;
 
@@ -297,7 +297,7 @@
         assignedUserId: GHL.userId,
         startTime:      isoInTz(start, BUSINESS_TZ),
         endTime:        isoInTz(end,   BUSINESS_TZ),
-        title:          `${name} — Non-Surgical Double Chin`,
+        title:          `${name} — Non-Surgical Double Chin and Neck Lifting`,
         // appointmentStatus: 'confirmed',
         selectedTimezone: BUSINESS_TZ,
       });
