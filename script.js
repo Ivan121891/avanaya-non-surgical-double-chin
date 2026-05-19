@@ -2,7 +2,7 @@
   "use strict";
 
   // ------- Configuration -------
-  const SERVICE_NAME = "Bye Bye Eye Bags";
+  const SERVICE_NAME = "Non-Surgical Double Chin";
   const SERVICE_DURATION_MIN = 60;
 
   // GHL credentials
@@ -281,8 +281,8 @@
         lastName: lastName || '-',
         email,
         phone,
-        source: 'Bye Bye Eye Bags LP',
-        tags: ['Bye Bye Eye Bags'],
+        source: 'Non-Surgical Double Chin LP',
+        tags: ['Non-Surgical Double Chin'],
       });
       const contactId = contactRes.contact?.id || contactRes.id;
 
@@ -297,7 +297,7 @@
         assignedUserId: GHL.userId,
         startTime:      isoInTz(start, BUSINESS_TZ),
         endTime:        isoInTz(end,   BUSINESS_TZ),
-        title:          `${name} — Bye Bye Eye Bags`,
+        title:          `${name} — Non-Surgical Double Chin`,
         // appointmentStatus: 'confirmed',
         selectedTimezone: BUSINESS_TZ,
       });
