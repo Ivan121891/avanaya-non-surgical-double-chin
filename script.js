@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  const TEST = new URLSearchParams(location.search).get('test') === '1';
+
   // ------- Configuration -------
   const SERVICE_NAME = "Non-Surgical Double Chin and Neck Lifting";
   const SERVICE_DURATION_MIN = 60;
@@ -15,12 +17,12 @@
     version:    '2021-07-28',
   };
 
-  const BUSINESS_TZ = "America/Los_Angeles";
+  const BUSINESS_TZ = "America/New_York";
 
-  // Generate 1-hr slots from 9 AM to 5 PM
+  // Generate 1-hr slots from 9 AM to 6 PM (matches GHL calendar)
   function buildAllSlots() {
     const slots = [];
-    for (let h = 9; h <= 17; h++) {
+    for (let h = 9; h <= 18; h++) {
       const ampm = h < 12 ? 'AM' : 'PM';
       const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
       slots.push({ label: display + ':00 ' + ampm, hour: h, minute: 0 });
@@ -101,7 +103,7 @@
       a.getDate() === b.getDate();
   }
   function formatLongDate(d) {
-    return d.toLocaleDateString(undefined, {
+    return d.toLocaleDateString('en-US', {
       weekday: "long", month: "long", day: "numeric", year: "numeric",
     });
   }
@@ -180,8 +182,8 @@
       morningGrid.innerHTML = '<p style="font-size:.8rem;color:var(--muted-foreground);text-align:center;grid-column:1/-1;padding:6px 0;">No available morning slots</p>';
     }
 
-    // Afternoon block (12 PM - 5 PM)
-    const afternoon = ALL_SLOTS.filter(s => s.hour >= 12 && s.hour <= 17);
+    // Afternoon block (12 PM - 6 PM)
+    const afternoon = ALL_SLOTS.filter(s => s.hour >= 12 && s.hour <= 18);
     const afternoonAvail = filterPast(afternoon);
     afternoonGrid.innerHTML = "";
     if (afternoonAvail.length > 0) {
@@ -275,14 +277,37 @@
 
     try {
       // 1) Upsert contact in GHL
+      // Persist the lead + chosen slot BEFORE any GHL call (non-blocking).
+      var leadId = null;
+      try {
+        const _leadRes = await fetch('/api/lead', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+          body: JSON.stringify({
+            locationId: GHL.locationId,
+            client: location.hostname.split('.')[0].split('-')[0],
+            page: location.hostname,
+            treatment: SERVICE_NAME,
+            calendarId: GHL.calendarId,
+            startTime: isoInTz(start, BUSINESS_TZ),
+            endTime: isoInTz(end, BUSINESS_TZ),
+            name, email, phone,
+            fbclid: (new URLSearchParams(location.search)).get('fbclid') || undefined,
+            fbp: (document.cookie.match(/_fbp=([^;]+)/) || [])[1],
+            fbc: (document.cookie.match(/_fbc=([^;]+)/) || [])[1],
+            test: TEST,
+          }),
+        });
+        const _leadJson = await _leadRes.json().catch(function () { return {}; });
+        leadId = _leadJson.leadId || null;
+      } catch (_) { /* never block booking on lead persistence */ }
       const contactRes = await ghlFetch('/contacts/upsert', {
         locationId: GHL.locationId,
-        firstName: firstName || name,
+        firstName: (TEST ? "[TEST] " : "") + (firstName || name),
         lastName: lastName || '-',
         email,
         phone,
         source: 'Non-Surgical Double Chin and Neck Lifting LP',
-        tags: ['Non-Surgical Double Chin and Neck Lifting'],
+        tags: TEST ? ['Non-Surgical Double Chin and Neck Lifting', 'TEST-DONOTCOUNT'] : ['Non-Surgical Double Chin and Neck Lifting'],
       });
       const contactId = contactRes.contact?.id || contactRes.id;
 
@@ -290,8 +315,9 @@
       // appointmentStatus: 'confirmed' ensures the booking is visible in
       // the GHL dashboard calendar view (default 'new' may be hidden).
       // selectedTimezone tells GHL which timezone the slot was picked in.
-      await ghlFetch('/calendars/events/appointments', {
+      const _aptRes = await ghlFetch('/calendars/events/appointments', {
         calendarId: GHL.calendarId,
+        ignoreFreeSlotValidation: true,
         locationId: GHL.locationId,
         contactId,
         assignedUserId: GHL.userId,
@@ -302,8 +328,20 @@
         selectedTimezone: BUSINESS_TZ,
       });
 
+      const appointmentId = (_aptRes && (_aptRes.id || _aptRes.appointmentId || (_aptRes.appointment && _aptRes.appointment.id))) || null;
+      // Record the TRUE outcome: ghlFetch throws on non-2xx (-> outer catch ->
+      // 'fail'), so reaching here means 2xx; a missing id is a captured lead,
+      // not a booking — record 'lead_only' so the store never over-counts success.
+      const bookingStatus = appointmentId ? 'success' : 'lead_only';
+      try {
+        fetch('/api/lead/result', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+          body: JSON.stringify({ leadId: leadId, locationId: GHL.locationId, status: bookingStatus, appointmentId: appointmentId, eventId: (typeof eventId !== 'undefined' ? eventId : null), scheduleFired: (!TEST && bookingStatus === 'success'), test: TEST }),
+        }).catch(function () {});
+      } catch (_) {}
+
       track("Lead", { content_name: SERVICE_NAME });
-      track("Schedule", { content_name: SERVICE_NAME });
+      if (!TEST && bookingStatus === 'success') track("Schedule", { content_name: SERVICE_NAME });
 
       renderConfirmation({
         service: SERVICE_NAME,
@@ -313,6 +351,12 @@
       showStep("confirmed");
     } catch (err) {
       console.error("GHL booking error", err);
+      try {
+        fetch('/api/lead/result', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+          body: JSON.stringify({ leadId: leadId, locationId: GHL.locationId, status: 'fail', error: (err && err.message) ? err.message : String(err), test: TEST }),
+        }).catch(function () {});
+      } catch (_) {}
       const detail = (err && err.message) ? err.message : "Booking failed. Please try again or call us.";
       errorText.textContent = detail;
       errorText.classList.remove("hidden");
