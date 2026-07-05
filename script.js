@@ -183,7 +183,7 @@
     }
 
     // Afternoon block (12 PM - 6 PM)
-    const afternoon = ALL_SLOTS.filter(s => s.hour >= 12 && s.hour <= ((selectedDate && selectedDate.getDay() === 5) ? 15 : 18));
+    const afternoon = ALL_SLOTS.filter(s => s.hour >= 12 && s.hour <= 18);
     const afternoonAvail = filterPast(afternoon);
     afternoonGrid.innerHTML = "";
     if (afternoonAvail.length > 0) {
